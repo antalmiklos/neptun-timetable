@@ -3,19 +3,24 @@ package database
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"strconv"
 
-	"github.com/amik3r/neptun-timetable/models"
 	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
+type WebModel interface {
+	ToJSON(w io.Writer) error
+}
+
 type DbConnection interface {
-	Migrate(m models.Model) error
-	CreateRecord(m models.Model) error
+	Migrate(m Model) error
+	CreateRecord(m Model) error
+	GetDBInstance() (*gorm.DB, error)
 	Close() error
 	Connect() error
 }
@@ -29,11 +34,19 @@ type DBPostgres struct {
 	dbname string
 }
 
-func (db *DBPostgres) Migrate(m models.Model) error {
+type Model interface {
+	ToJSON(w io.Writer, m Model) error
+}
+
+func (db *DBPostgres) GetDBInstance() (*gorm.DB, error) {
+	return db.Con, nil
+}
+
+func (db *DBPostgres) Migrate(m Model) error {
 	return db.Con.AutoMigrate(&m)
 }
 
-func (db *DBPostgres) CreateRecord(m models.Model) error {
+func (db *DBPostgres) CreateRecord(m Model) error {
 	res := db.Con.Create(m)
 	if errors.Is(res.Error, gorm.ErrInvalidData) {
 		return errors.New(res.Error.Error())
