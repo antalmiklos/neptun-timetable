@@ -1,25 +1,44 @@
 package database
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
+	"os"
+	"strconv"
 
+	"github.com/amik3r/neptun-timetable/models"
+	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 type DbConnection interface {
-	Connect() error
+	Migrate(m models.Model) error
+	CreateRecord(m models.Model) error
 	Close() error
+	Connect() error
 }
 
 type DBPostgres struct {
 	Con    *gorm.DB
-	Dbpass string
-	Dbuser string
-	Dbhost string
-	Dbport int
-	Dbname string
+	dbpass string
+	dbuser string
+	dbhost string
+	dbport int
+	dbname string
+}
+
+func (db *DBPostgres) Migrate(m models.Model) error {
+	return db.Con.AutoMigrate(&m)
+}
+
+func (db *DBPostgres) CreateRecord(m models.Model) error {
+	res := db.Con.Create(m)
+	if errors.Is(res.Error, gorm.ErrInvalidData) {
+		return errors.New(res.Error.Error())
+	}
+	return nil
 }
 
 func (d *DBPostgres) Close() error {
@@ -31,30 +50,53 @@ func (d *DBPostgres) Close() error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("Connection closed")
 	return nil
 }
 
 func (d *DBPostgres) Connect() error {
-	con, err := createConnection(d.Dbuser, d.Dbpass, d.Dbport, d.Dbhost, d.Dbname)
+	con, err := createConnection()
 	if err != nil {
 		return err
 	}
 	d.Con = con
+	fmt.Println("Connection created")
 	return nil
 }
 
-func createConnection(dbuser string, dbpass string, dbport int, dbhost string, dbname string) (*gorm.DB, error) {
+func getEnv(key string) string {
+	err := godotenv.Load(".env")
+	if err != nil {
+		return ""
+	}
+	return os.Getenv(key)
+}
+
+func createConnection() (*gorm.DB, error) {
+
+	port, err := strconv.Atoi(getEnv("DBPORT"))
+	if err != nil {
+		panic(err)
+	}
+	db := &DBPostgres{
+		dbuser: getEnv("DBUSER"),
+		dbpass: getEnv("DBPASS"),
+		dbhost: getEnv("DBHOST"),
+		dbport: port,
+		dbname: getEnv("DBNAME"),
+	}
+
 	dsn := url.URL{
-		User:     url.UserPassword(dbuser, dbpass),
+		User:     url.UserPassword(db.dbuser, db.dbpass),
 		Scheme:   "postgres",
-		Host:     fmt.Sprintf("%s:%d", dbhost, dbport),
-		Path:     dbname,
+		Host:     fmt.Sprintf("%s:%d", db.dbhost, db.dbport),
+		Path:     db.dbname,
 		RawQuery: (&url.Values{"sslmode": []string{"disable"}}).Encode(),
 	}
-	db, err := gorm.Open(postgres.Open(dsn.String()), &gorm.Config{})
+	dbCon, err := gorm.Open(postgres.Open(dsn.String()), &gorm.Config{})
 
 	if err != nil {
 		return nil, err
 	}
-	return db, nil
+	return dbCon, nil
 }

@@ -2,49 +2,34 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"strconv"
+	"sync"
 
 	"github.com/amik3r/neptun-timetable/database"
 	"github.com/amik3r/neptun-timetable/models"
-	"github.com/joho/godotenv"
 )
 
-func GetEnv(key string) string {
-	err := godotenv.Load(".env")
+func CreateManufacturer(name string, db database.DbConnection, wg *sync.WaitGroup) {
+	var manufacturer models.Manufacturer
+	m := manufacturer.NewManufacturer()
+	m.Name = name
+	err := db.Migrate(m)
 	if err != nil {
-		return ""
+		fmt.Println(err)
 	}
-	return os.Getenv(key)
+	err = db.CreateRecord(m)
+	if err != nil {
+		fmt.Println(err)
+	}
+	wg.Done()
 }
 
 func main() {
-
-	port, err := strconv.Atoi(GetEnv("DBPORT"))
-	if err != nil {
-		panic(err)
-	}
-	db := &database.DBPostgres{
-		Dbuser: GetEnv("DBUSER"),
-		Dbpass: GetEnv("DBPASS"),
-		Dbhost: GetEnv("DBHOST"),
-		Dbport: port,
-		Dbname: GetEnv("DBNAME"),
-	}
-
-	err = db.Connect()
-	if err != nil {
-		panic(err)
-	}
-	if err != nil {
-		panic(err)
-	}
-
-	var course models.Course
-
-	res := db.Con.First(&course)
-	fmt.Println(*res)
-	if err != nil {
-		panic(err)
-	}
+	var wg sync.WaitGroup
+	wg.Add(3)
+	db := &database.DBPostgres{}
+	db.Connect()
+	go CreateManufacturer("Orange", db, &wg)
+	go CreateManufacturer("Shure", db, &wg)
+	go CreateManufacturer("Bose", db, &wg)
+	wg.Wait()
 }
