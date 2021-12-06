@@ -11,8 +11,10 @@ import (
 
 type Manufacturer struct {
 	ID   uint   `gorm:"primaryKey" json:"id"`
-	Name string `gorm:"unique" json:"name"`
+	Name string `gorm:"unique" json:"name" validate:"required"`
 }
+
+//regex=[a-zA-Z0-9]
 
 func NewManufacturer() *Manufacturer {
 	return &Manufacturer{}
@@ -25,28 +27,27 @@ func (m *Manufacturer) ToJSON(w io.Writer) error {
 
 func (m *Manufacturer) GetManufacturers(db *gorm.DB) []Manufacturer {
 	var results []Manufacturer
-	//var resSet []map[string]interface{}
 	res := db.Model(&m).Find(&results)
-	count := int(res.RowsAffected)
 	resr, _ := res.Rows()
-	for i := 0; i < count; i++ {
-		mm := NewManufacturer()
-		res.Scan(mm)
-		mm = &Manufacturer{Name: mm.Name, ID: mm.ID}
-		results[i] = *mm
-		resr.NextResultSet()
+	defer resr.Close()
+	for resr.Next() {
+		resr.Scan(&m)
 	}
 	return results
 }
 
 func (m *Manufacturer) GetManufacturer(field, value string, db *gorm.DB) error {
-	db.Where(fmt.Sprintf("%s=?", field), value).Find(&m)
+	db.Where(fmt.Sprintf("LOWER(%s)=LOWER(?)", field), value).Find(&m)
 	if m.ID == 0 {
 		return errors.New("record not found")
 	}
 	return nil
 }
 
-func (m *Manufacturer) AddManufacturer(db *gorm.DB) {
-	db.Create(&m)
+func (m *Manufacturer) AddManufacturer(db *gorm.DB, mm *Manufacturer) error {
+	err := db.Create(mm).Error
+	if err != nil {
+		return err
+	}
+	return nil
 }

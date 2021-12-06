@@ -2,6 +2,8 @@ package main
 
 import (
 	"github.com/amik3r/neptun-timetable/database"
+	"github.com/amik3r/neptun-timetable/models"
+	"github.com/amik3r/neptun-timetable/models/connector"
 	"github.com/amik3r/neptun-timetable/server"
 )
 
@@ -23,10 +25,10 @@ import (
 func main() {
 	db := database.DBPostgres{}
 	err := db.Connect()
+	db.Con.AutoMigrate(&models.Manufacturer{}, &connector.Cable{})
 	if err != nil {
 		panic(err)
 	}
 	s := server.NewServer(&db)
 	s.StartServer()
-
 }

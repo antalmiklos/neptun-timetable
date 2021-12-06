@@ -5,7 +5,7 @@ import (
 	"io"
 
 	"github.com/amik3r/neptun-timetable/models"
-	connections "github.com/amik3r/neptun-timetable/models/io"
+	"github.com/amik3r/neptun-timetable/models/connector"
 )
 
 type Amplifier struct {
@@ -15,8 +15,8 @@ type Amplifier struct {
 	Type         string
 	Technology   string
 	Output       int
-	Outputs      []connections.Cable
-	Inputs       []connections.Cable
+	Outputs      []connector.Cable
+	Inputs       []connector.Cable
 }
 
 func (m *Amplifier) NewManufacturer() *Amplifier {

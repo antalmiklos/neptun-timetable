@@ -3,7 +3,6 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -11,47 +10,57 @@ import (
 	"net/http"
 
 	"github.com/amik3r/neptun-timetable/database"
-	"github.com/amik3r/neptun-timetable/models"
+	"github.com/amik3r/neptun-timetable/models/connector"
 	"github.com/go-playground/validator"
 	"github.com/gorilla/mux"
 	"gorm.io/gorm"
 )
 
-type Manufacturer struct {
+type Cable struct {
 	l  log.Logger
 	db *gorm.DB
 }
 
-func NewManufacturer(l *log.Logger, dc database.DbConnection) *Manufacturer {
+func NewCable(l *log.Logger, dc database.DbConnection) *Cable {
 	db, err := dc.GetDBInstance()
 	if err != nil {
 		panic(err)
 	}
-	return &Manufacturer{*l, db}
+	return &Cable{*l, db}
 }
 
-func (m *Manufacturer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+func (c *Cable) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
-		m.GetManufacturer(rw, r)
+		c.GetCables(rw, r)
 		return
 	}
 	if r.Method == http.MethodPost {
-		m.PostManufacturer(rw, r)
+		c.PostCable(rw, r)
 		return
 	}
 	http.Error(rw, "Not implemented", http.StatusNotImplemented)
 }
 
-func (m *Manufacturer) PostManufacturer(rw http.ResponseWriter, r *http.Request) {
+func (c *Cable) GetCables(rw http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	mm := models.NewManufacturer()
+	j := json.NewEncoder(rw)
+	mm := connector.NewCable()
+	err := j.Encode(mm.FindAll(c.db))
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (c *Cable) PostCable(rw http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	mm := connector.NewCable()
 	j := json.NewDecoder(r.Body)
 	err := j.Decode(&mm)
 	if err != nil {
-		m.l.Println(err.Error())
+		c.l.Println(err.Error())
 	}
 	fmt.Println(mm)
-	err = mm.AddManufacturer(m.db, mm)
+	err = mm.CreateCable(c.db, mm)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusConflict)
 	} else {
@@ -60,21 +69,21 @@ func (m *Manufacturer) PostManufacturer(rw http.ResponseWriter, r *http.Request)
 	}
 }
 
-func (m *Manufacturer) GetManufacturer(rw http.ResponseWriter, r *http.Request) {
+func (c *Cable) GetCable(rw http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	mm := models.NewManufacturer()
+	mm := connector.NewCable()
 	id, foundid := mux.Vars(r)["id"]
 	name, foundname := mux.Vars(r)["name"]
 	if foundid {
-		err := mm.GetManufacturer("id", id, m.db)
+		err := mm.Find("id", id, c.db)
 		if err != nil {
-			http.Error(rw, fmt.Sprintf("Manufacturer not found: %s", id), http.StatusNotFound)
+			http.Error(rw, fmt.Sprintf("Cable not found: %s", id), http.StatusNotFound)
 			return
 		}
 	} else if foundname {
-		err := mm.GetManufacturer("name", name, m.db)
+		err := mm.Find("name", name, c.db)
 		if err != nil {
-			http.Error(rw, fmt.Sprintf("Manufacturer not found: %s", name), http.StatusNotFound)
+			http.Error(rw, fmt.Sprintf("Cable not found: %s", name), http.StatusNotFound)
 			return
 		}
 	} else {
@@ -83,30 +92,24 @@ func (m *Manufacturer) GetManufacturer(rw http.ResponseWriter, r *http.Request) 
 	}
 	err := mm.ToJSON(rw)
 	if err != nil {
-		m.l.Println(err.Error())
+		c.l.Println(err.Error())
 	}
 }
 
-func (m *Manufacturer) GetManufacturers(rw http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-	j := json.NewEncoder(rw)
-	mm := models.NewManufacturer()
-	err := j.Encode(mm.GetManufacturers(m.db))
-	if err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-	}
-}
-
-func (m *Manufacturer) ValidateManufacturerMW(next http.Handler) http.Handler {
+func (c *Cable) ValidateCableMW(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		v := validator.New()
-		mm := models.NewManufacturer()
+		mm := connector.NewCable()
 		buf, _ := ioutil.ReadAll(r.Body)
 		rdr1 := io.NopCloser(bytes.NewBuffer(buf))
 		rdr2 := io.NopCloser(bytes.NewBuffer(buf))
 		r.Body = rdr2
 		j := json.NewDecoder(rdr1)
 		j.Decode(mm)
+		if mm.Size == 0 {
+			http.Error(rw, "Size can't be 0", http.StatusBadRequest)
+			return
+		}
 		err := v.Struct(mm)
 		if err != nil {
 			http.Error(rw, err.Error(), http.StatusBadRequest)
@@ -116,13 +119,13 @@ func (m *Manufacturer) ValidateManufacturerMW(next http.Handler) http.Handler {
 	})
 }
 
-func (m *Manufacturer) Get(mm models.Manufacturer, key string, value string, db *gorm.DB) error {
+/* func (c *Cable) Get(mm models.Manufacturer, key string, value string, db *gorm.DB) error {
 	db.Where(fmt.Sprintf("LOWER(%s)=LOWER(?)", key), value).Find(&mm)
 	if mm.ID == 0 {
 		return errors.New("record not found")
 	}
 	return nil
-}
+} */
 
 /*
 func (m *Manufacturer) GetMany(zm server.WebModel, key string, value string, db *gorm.DB) error {
