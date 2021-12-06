@@ -14,6 +14,7 @@ import (
 )
 
 type Server struct {
+	l           *log.Logger
 	DB          *gorm.DB
 	BindAddress string
 	Port        int
@@ -30,30 +31,44 @@ func getEnv(key string) string {
 }
 
 func NewServer(dbc database.DbConnection) *Server {
-	s := Server{}
-
 	l := log.New(os.Stdout, "", log.LstdFlags)
+	s := Server{BindAddress: getEnv("HOST"), l: l}
+
 	mh := handlers.NewManufacturer(l, dbc)
 
 	r := mux.NewRouter()
-	r.Handle("/manufacturer/{id:[0-9]+}", mh)
-	r.Use(loggingMiddleWare)
+	r.Use(s.loggingMiddleWare)
+
+	s.addHandlers(r)
+	mr := r.PathPrefix("/manufacturer").Subrouter()
+	mr.PathPrefix("/").HandlerFunc(mh.GetManufacturers).Methods("GET")
+	mr.PathPrefix("/{id:[0-9]+}").HandlerFunc(mh.GetManufacturer).Methods("GET")
+	mr.PathPrefix("/name/{name:[a-zA-Z0-9]+}").HandlerFunc(mh.GetManufacturer).Methods("GET")
+	mr.PathPrefix("/create").HandlerFunc(mh.PostManufacturer).Methods("POST")
 
 	s.HttpServer = http.Server{
-		Addr:     getEnv("HOST"),
+		Addr:     s.BindAddress,
 		ErrorLog: l,
 		Handler:  r,
 	}
 	return &s
 }
 
-func loggingMiddleWare(next http.Handler) http.Handler {
+func (s *Server) addHandlers(r *mux.Router) {
+
+}
+
+func (s *Server) loggingMiddleWare(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		fmt.Println("lol")
+		s.l.Println(r.RemoteAddr, r.RequestURI)
 		next.ServeHTTP(rw, r)
 	})
 }
 
-func (s *Server) StartServer() error {
-	return s.HttpServer.ListenAndServe()
+func (s *Server) StartServer() {
+	fmt.Printf("Starting server on %s\n", s.BindAddress)
+	err := s.HttpServer.ListenAndServe()
+	if err != nil {
+		panic(err)
+	}
 }

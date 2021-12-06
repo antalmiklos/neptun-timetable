@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/amik3r/neptun-timetable/database"
 	"github.com/amik3r/neptun-timetable/server"
 )
@@ -24,10 +22,11 @@ import (
 
 func main() {
 	db := database.DBPostgres{}
-	db.Connect()
-	s := server.NewServer(&db)
-	err := s.StartServer()
+	err := db.Connect()
 	if err != nil {
-		fmt.Println(err.Error())
+		panic(err)
 	}
+	s := server.NewServer(&db)
+	s.StartServer()
+
 }
